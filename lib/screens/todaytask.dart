@@ -1,0 +1,93 @@
+import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:intl/intl.dart';
+import 'taskdetail.dart';
+
+class TodayTasksScreen extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text('งานวันนี้')),
+      body: TaskListView(DateTime.now()),
+    );
+  }
+}
+
+class TaskListView extends StatelessWidget {
+  final DateTime date;
+
+  TaskListView(this.date);
+
+  @override
+  Widget build(BuildContext context) {
+    final userEmail = 'user@example.com'; // เปลี่ยนเป็น userEmail ที่ถูกต้อง
+
+    return StreamBuilder<DocumentSnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('tasks')
+          .doc(userEmail)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Center(child: CircularProgressIndicator());
+        }
+
+        if (!snapshot.hasData || !snapshot.data!.exists) {
+          return Center(child: Text('ไม่พบเอกสาร'));
+        }
+
+        final tasks =
+            (snapshot.data!.data() as Map<String, dynamic>)['tasks'] ?? {};
+
+        // กรองงานตามวันที่ในฟิลด์ 'deadline'
+        final filteredTasks = (tasks.values as List<dynamic>).where((task) {
+          final deadline = task['deadline'] as Timestamp?;
+          if (deadline != null) {
+            return DateFormat('yyyy-MM-dd').format(deadline.toDate()) ==
+                DateFormat('yyyy-MM-dd').format(date);
+          }
+          return false; // ถ้าไม่มี deadline ให้กรองออก
+        }).toList();
+
+        if (filteredTasks.isEmpty) {
+          return Center(child: Text('ไม่มีงานสำหรับวันนี้'));
+        }
+
+        return ListView.builder(
+          itemCount: filteredTasks.length,
+          itemBuilder: (context, index) {
+            final taskData = filteredTasks[index] as Map<String, dynamic>;
+            String task = taskData['task'] ?? '';
+            String priority = taskData['priority'] ?? '';
+            String time = taskData['time'] ?? '';
+            String taskDate = DateFormat('yyyy-MM-dd')
+                .format((taskData['deadline'] as Timestamp).toDate());
+
+            return Card(
+              margin: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              elevation: 5,
+              child: ListTile(
+                title:
+                    Text(task, style: TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: Text(
+                    'Priority: $priority\nTime: $time\nDeadline: $taskDate'),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => TaskDetailsScreen(
+                        taskData: taskData,
+                        userEmail: userEmail,
+                        taskId: taskData['taskId'], // ใช้ taskId ที่ถูกต้อง
+                      ),
+                    ),
+                  );
+                },
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+}
